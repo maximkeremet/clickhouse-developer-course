@@ -1,6 +1,7 @@
-Solutions for the Clickhouse developer course. Executed both - in ClickHouse Cloud platform and local server & client setup.
+Solutions for the Clickhouse developer course @ Clickhouse Academy. Executed both - in ClickHouse Cloud platform and local server & client setup.
 
 Resources:
-- [Clickhouse developer course](https://learn.clickhouse.com/user_catalog_class/show/1328973?title=ClickHouse-Developer-Learning-Path)
-- [Clickhouse documnentation](https://clickhouse.com/docs)
+- [Clickhouse Academy](https://learn.clickhouse.com/)
+- [Developer course](https://learn.clickhouse.com/user_catalog_class/show/1328973?title=ClickHouse-Developer-Learning-Path)
+- [Clickhouse documentation](https://clickhouse.com/docs)
 
