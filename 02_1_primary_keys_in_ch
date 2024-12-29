@@ -1,0 +1,120 @@
+-- Lab 2.1: Understanding the Primary Keys in ClickHouse
+-- 1. Observa data
+
+DESCRIBE s3('https://datasets-documentation.s3.eu-west-3.amazonaws.com/pypi/2023/pypi_0_7_34.snappy.parquet');
+
+
+-- 2. See 10 lines
+SELECT * 
+FROM s3('https://datasets-documentation.s3.eu-west-3.amazonaws.com/pypi/2023/pypi_0_7_34.snappy.parquet')
+LIMIT 10;
+
+
+-- 3. Count stuff
+SELECT formatReadableQuantity(count()) FROM s3('https://datasets-documentation.s3.eu-west-3.amazonaws.com/pypi/2023/pypi_0_7_34.snappy.parquet');
+-- 1.69 million
+
+
+-- 4. Create table
+-- DROP TABLE pypi;
+CREATE TABLE pypi (
+    _TIMESTAMP DateTime64(3),
+    COUNTRY_CODE LowCardinality(String),
+    URL String,
+    PROJECT String,
+)
+ENGINE = MergeTree
+PRIMARY KEY _TIMESTAMP
+
+-- 5. Insert data
+INSERT INTO pypi (_TIMESTAMP, COUNTRY_CODE, URL, PROJECT)
+SELECT TIMESTAMP as _TIMESTAMP, COUNTRY_CODE, URL, PROJECT
+FROM s3('https://datasets-documentation.s3.eu-west-3.amazonaws.com/pypi/2023/pypi_0_7_34.snappy.parquet', 'PARQUET',
+               'TIMESTAMP DateTime64(), 
+               COUNTRY_CODE String, 
+               URL String, 
+               PROJECT String'
+);
+
+
+-- 6. Verify stuff
+SELECT PROJECT, formatReadableQuantity(count()) as cnt 
+FROM pypi 
+GROUP by PROJECT
+ORDER BY cnt DESC 
+LIMIT 100;
+
+-- 7. Access read statistics
+-- Read: 1,692,671 rows (31.81 MB) -> fullscan
+
+-- 8. Add filter
+SELECT PROJECT, formatReadableQuantity(count()) as cnt 
+FROM pypi 
+WHERE toStartOfMonth(_TIMESTAMP) = '2023-04-01'
+GROUP by PROJECT
+ORDER BY cnt DESC 
+LIMIT 100;
+
+-- 9. Acess read statistics
+-- Read: 557,056 rows (14.95 MB) -> because _TIMESTAMP is PK and we can skip all months that are not '2023-04-01'
+
+
+ -- 10. Filter `boto`-like packages
+SELECT PROJECT, formatReadableQuantity(count()) as cnt 
+FROM pypi 
+WHERE PROJECT LIKE '%boto%'
+GROUP by PROJECT
+ORDER BY cnt DESC;
+
+-- 11. Acess read statistics
+-- Read: 1,692,671 rows (31.81 MB) -> because PROJECT is not in PK and we need to search all rows for matching the pattern
+
+-- 12. Create additional tablw with PROJECT in PK
+CREATE TABLE pypi2 (
+    TIMESTAMP DateTime,
+    COUNTRY_CODE String,
+    URL String,
+    PROJECT String 
+)
+ENGINE = MergeTree
+PRIMARY KEY (TIMESTAMP, PROJECT);
+
+INSERT INTO pypi2
+    SELECT *
+    FROM pypi;
+
+SELECT 
+    PROJECT,
+    count() AS c
+FROM pypi2
+WHERE PROJECT LIKE 'boto%'
+GROUP BY PROJECT
+ORDER BY c DESC;
+
+-- 13. Skip granules?
+-- Read: 1,692,671 rows (31.81 MB) -> Nothing skipped, because it is more granular than TIMESTAMP
+
+-- 14. Rewrite table PK
+CREATE OR REPLACE TABLE pypi2 (
+    TIMESTAMP DateTime,
+    COUNTRY_CODE String,
+    URL String,
+    PROJECT String 
+)
+ENGINE = MergeTree
+PRIMARY KEY (PROJECT, TIMESTAMP);
+
+INSERT INTO pypi2
+    SELECT *
+    FROM pypi;
+
+SELECT 
+    PROJECT,
+    count() AS c
+FROM pypi2
+WHERE PROJECT LIKE 'boto%'
+GROUP BY PROJECT
+ORDER BY c DESC;
+
+-- 15. Skipped granules?
+-- Read: 90,112 rows (1.39 MB) -> yes, 11 granules (90112 / 8129 = 11), because we can skip granules that don't start with boto%
