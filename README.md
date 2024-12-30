@@ -2,7 +2,7 @@ Solutions for the Clickhouse developer course @ Clickhouse Academy. Executed bot
 
 Resources:
 - [Clickhouse Academy](https://learn.clickhouse.com/)
-- [Developer course](https://learn.clickhouse.com/user_catalog_class/show/1328973?title=ClickHouse-Developer-Learning-Path)
+- [Clickhouse developer course](https://learn.clickhouse.com/user_catalog_class/show/1328973?title=ClickHouse-Developer-Learning-Path)
 - [Clickhouse documentation](https://clickhouse.com/docs)
 - [Clickhouse cloud](https://console.clickhouse.cloud/)
 
