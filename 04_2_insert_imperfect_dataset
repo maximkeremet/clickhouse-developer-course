@@ -1,0 +1,114 @@
+-- Lab 4.3: Insert an Imperfect CSV File
+
+-- 1. Access the file
+SELECT formatReadableQuantity(count()) FROM s3('https://learn-clickhouse.s3.us-east-2.amazonaws.com/operating_budget.csv')
+SETTINGS 
+format_csv_delimiter='~';
+
+-- 2. Yearly spent
+SELECT formatReadableQuantity(sum(actual_amount)) FROM s3('https://learn-clickhouse.s3.us-east-2.amazonaws.com/operating_budget.csv')
+SETTINGS 
+format_csv_delimiter='~';
+
+-- 3. Approved amount with issue
+SELECT sum(toDecimal64(approved_amount, 2)) FROM s3('https://learn-clickhouse.s3.us-east-2.amazonaws.com/operating_budget.csv')
+SETTINGS 
+format_csv_delimiter='~';
+
+-- 4. Inspect schema
+DESCRIBE s3('https://learn-clickhouse.s3.us-east-2.amazonaws.com/operating_budget.csv')
+SETTINGS
+format_csv_delimiter='~';
+
+-- 5. Using toUInt32OrZero with toString
+SELECT formatReadableQuantity(sum(toUInt32OrZero(toString(actual_amount)))) as sum_actual_amount, 
+       formatReadableQuantity(sum(toUInt32OrZero(toString(approved_amount)))) as sum_approved_amount
+FROM s3('https://learn-clickhouse.s3.us-east-2.amazonaws.com/operating_budget.csv')
+SETTINGS 
+format_csv_delimiter='~'
+FORMAT Vertical;
+
+-- 6. Using `schema_inference_hints` -> Code 27 : CANNOT_PARSE_INPUT_ASSERTION_FAILED
+-- Because the actual columns are Nullable(String) type
+SELECT 
+    formatReadableQuantity(sum(approved_amount)),
+    formatReadableQuantity(sum(recommended_amount))
+FROM s3('https://learn-clickhouse.s3.us-east-2.amazonaws.com/operating_budget.csv')
+SETTINGS 
+format_csv_delimiter='~',
+schema_inference_hints='approved_amount UInt32, recommended_amount UInt32';
+
+-- 7. Create a table instead
+
+select * from s3('https://learn-clickhouse.s3.us-east-2.amazonaws.com/operating_budget.csv') limit 10
+SETTINGS 
+format_csv_delimiter='~'
+
+DROP TABLE operating_budget
+CREATE TABLE operating_budget (
+   fiscal_year	LowCardinality(String),
+   service LowCardinality(String),
+   department LowCardinality(String),
+   program_name LowCardinality(String),
+   program_code LowCardinality(String),
+   description	String,
+   item_category LowCardinality(String),
+   approved_amount UInt32,
+   recommended_amount UInt32,
+   actual_amount Decimal(12,2),
+   fund LowCardinality(String),
+   fund_type Enum('GENERAL FUNDS', 'FEDERAL FUNDS', 'OTHER FUNDS')
+)
+ENGINE=MergeTree
+PRIMARY KEY (fiscal_year, program_name);
+-- SETTINGS format_csv_delimiter = '~'; -- Unknown setting 'format_csv_delimiter': for storage SharedMergeTree.
+
+-- 8. Insert data
+
+INSERT INTO operating_budget (fiscal_year, department, service, program_name, program_code, description, item_category, approved_amount, recommended_amount, actual_amount, fund, fund_type) 
+SELECT fiscal_year, 
+      department, 
+      service, 
+      trim(replaceAll(program, '\\(\\d+\\)', '')) AS program_name,
+      extract(program, '\\((\\d+)\\)') AS program_code,
+      description, 
+      item_category, 
+      toUInt32(approved_amount) as approved_amount, 
+      toUInt32(recommended_amount) as recommended_amount, 
+      toDecimal64(actual_amount, 2) as actual_amount, 
+      fund, 
+      fund_type
+FROM s3('https://learn-clickhouse.s3.us-east-2.amazonaws.com/operating_budget.csv', 'CSV', 
+               'fiscal_year Nullable(String), 
+               service Nullable(String), 
+               department Nullable(String), 
+               program String, 
+               description Nullable(String), 
+               item_category Nullable(String), 
+               approved_amount Nullable(String), 
+               recommended_amount Nullable(String), 
+               actual_amount Nullable(Float64),
+               fund Nullable(String), 
+               fund_type Nullable(String)'
+) 
+SETTINGS input_format_csv_skip_first_lines=1, format_csv_delimiter = '~'
+
+
+select count() from operating_budget -- 6205
+
+SELECT formatReadableQuantity(count()) FROM s3('https://learn-clickhouse.s3.us-east-2.amazonaws.com/operating_budget.csv')
+SETTINGS 
+format_csv_delimiter='~';
+
+-- 9. Verify Insert
+select count() from operating_budget -- 6205... quite samll amount of rowsss
+
+-- 10.Verify approved_amount
+SELECT formatReadableQuantity(sum(approved_amount)) 
+FROM operating_budget 
+WHERE fiscal_year = '2022' 
+
+-- 11. Ad-hoc query
+SELECT sum(actual_amount)
+FROM operating_budget 
+WHERE fiscal_year = '2022' and program_code = '031'
